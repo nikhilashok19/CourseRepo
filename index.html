@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Course Repository</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F6F3EC; --ink: #22271F; --ink-soft: #5B6156;
+    --moss: #34503F; --moss-dark: #263C2F; --card: #FFFEFB; --rule: #D8D2C2; --amber: #96631E;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; }
+  .font-serif-head { font-family: 'Source Serif 4', serif; }
+  .rule { border-color: var(--rule); }
+  .tab-accent { box-shadow: inset 4px 0 0 0 var(--course-color, var(--moss)); }
+  .fade-in { animation: fadeIn .3s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .skeleton { background: linear-gradient(90deg,#EAE5D8 25%,#F1ECDF 37%,#EAE5D8 63%); background-size:400% 100%; animation: shimmer 1.4s ease infinite; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  textarea { font-family: ui-monospace, 'SF Mono', Menlo, monospace; }
+</style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ==========================================================
+       Settings. ROOT_DIR is where your course folders live, both
+       for the generator (local only) and for building download
+       links (everywhere). STRUCTURE_FILE is the plain .js file the
+       app reads to render the UI — it is loaded with a <script>
+       tag, not fetch(), so this page works by double-clicking
+       index.html (file://) as well as over http.
+       ========================================================== -->
+  <script>
+    const ROOT_DIR = "courses/";
+    const STRUCTURE_FILE = "dirStructure.js";
+
+    /* ==========================================================
+       ENROLLMENT CODES — edit by hand, keep them here.
+       Key = the course folder name exactly as it appears in
+       dirStructure.js. A course with no entry here shows
+       "No enrollment code" on the landing page.
+       ========================================================== */
+    const ENROLLMENT_CODES = {
+      "Mathematical Methods for Computing": "246195083",
+      "Advance Operating Systems": "942670538",
+      // "Course 2": "XYZ-789",
+    };
+  </script>
+
+  <!-- The generated structure. Loaded as a script so file:// works. -->
+  <script src="dirStructure.js" onerror="window.__structureScriptFailed = true"></script>
+
+  <!-- ============ LOCAL-ONLY GENERATOR PANEL ============
+       Only ever runs when this page is opened from localhost/127.0.0.1.
+       On GitHub Pages this whole block never executes, so the deployed
+       site can never fail or slow down because of it. -->
+  <div id="generatorPanel" class="hidden border-b" style="border-color:#E4D2A8; background:#FBF3E1;">
+    <div class="max-w-5xl mx-auto px-6 py-4">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <p class="text-sm font-semibold" style="color: var(--amber)">Local dev tool — not shown on the deployed site</p>
+          <p class="text-xs text-[var(--ink-soft)] mt-0.5">Scans "<span id="rootDirLabel"></span>" on this machine and builds <code class="bg-white/70 px-1 rounded">dirStructure.js</code> for you to copy.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="regenBtn" class="text-xs font-medium px-3 py-1.5 rounded-sm border" style="border-color:var(--amber); color:var(--amber)">Regenerate</button>
+          <button id="copyJsonBtn" class="text-xs font-medium px-3 py-1.5 rounded-sm border bg-[var(--moss-dark)] text-white" style="border-color:var(--moss-dark)">Copy JS</button>
+        </div>
+      </div>
+      <textarea id="jsonOutput" readonly class="mt-3 w-full h-48 text-xs bg-white border rounded-sm p-3" style="border-color:#E4D2A8;" placeholder="Generating..."></textarea>
+      <p id="genStatus" class="text-xs text-[var(--ink-soft)] mt-1.5"></p>
+    </div>
+  </div>
+
+  <header class="border-b rule bg-[var(--paper)] sticky top-0 z-10">
+    <div class="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+      <button id="homeLink" class="flex items-center gap-3">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.67 4.67 5 5.5 5H11L13 7H18.5C19.33 7 20 7.67 20 8.5V17.5C20 18.33 19.33 19 18.5 19H5.5C4.67 19 4 18.33 4 17.5V6.5Z" stroke="var(--moss-dark)" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <span class="font-serif-head text-xl font-semibold tracking-tight" style="color: var(--moss-dark)">Course Repository</span>
+      </button>
+      <div class="flex items-center gap-4">
+        <nav id="breadcrumbs" class="text-sm text-[var(--ink-soft)] flex items-center gap-1.5"></nav>
+        <button id="refreshBtn" title="Reload dirStructure.js" class="text-[var(--ink-soft)] hover:text-[var(--moss-dark)] transition-colors">
+          <svg id="refreshIcon" width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 4V9H4.582M20 20V15H19.419M4.582 9C5.99667 6.1 8.94 4.2 12.32 4.2C16.7382 4.2 20.32 7.78 20.32 12.2C20.32 12.87 20.24 13.52 20.09 14.14M19.419 15C18.0033 17.9 15.06 19.8 11.68 19.8C7.26 19.8 3.68 16.22 3.68 11.8C3.68 11.13 3.76 10.48 3.91 9.86" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app" class="max-w-5xl mx-auto px-6 py-10"></main>
+
+<script>
+(function () {
+  const app = document.getElementById("app");
+  const crumbsEl = document.getElementById("breadcrumbs");
+  const refreshIcon = document.getElementById("refreshIcon");
+  document.getElementById("homeLink").addEventListener("click", () => navigate({ view: "home" }));
+  document.getElementById("refreshBtn").addEventListener("click", () => render(true));
+
+  let state = { view: "home" };
+  let structure = null; // from window.COURSE_STRUCTURE (dirStructure.js)
+
+  const ICONS = {
+    pptx: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="1.5" fill="#E8611E" opacity=".14"/><path d="M6 4.5C6 3.67 6.67 3 7.5 3H14L18 7V19.5C18 20.33 17.33 21 16.5 21H7.5C6.67 21 6 20.33 6 19.5V4.5Z" stroke="#B0522D" stroke-width="1.3"/><path d="M14 3V6.5C14 6.78 14.22 7 14.5 7H18" stroke="#B0522D" stroke-width="1.3"/></svg>`,
+    docx: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="1.5" fill="#2B5FAD" opacity=".12"/><path d="M6 4.5C6 3.67 6.67 3 7.5 3H14L18 7V19.5C18 20.33 17.33 21 16.5 21H7.5C6.67 21 6 20.33 6 19.5V4.5Z" stroke="#2B5FAD" stroke-width="1.3"/><path d="M14 3V6.5C14 6.78 14.22 7 14.5 7H18" stroke="#2B5FAD" stroke-width="1.3"/></svg>`,
+    pdf: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="1.5" fill="#8A2E2E" opacity=".12"/><path d="M6 4.5C6 3.67 6.67 3 7.5 3H14L18 7V19.5C18 20.33 17.33 21 16.5 21H7.5C6.67 21 6 20.33 6 19.5V4.5Z" stroke="#8A2E2E" stroke-width="1.3"/><path d="M14 3V6.5C14 6.78 14.22 7 14.5 7H18" stroke="#8A2E2E" stroke-width="1.3"/></svg>`,
+    zip: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="1.5" fill="#8A6D2E" opacity=".14"/><path d="M6 4.5C6 3.67 6.67 3 7.5 3H14L18 7V19.5C18 20.33 17.33 21 16.5 21H7.5C6.67 21 6 20.33 6 19.5V4.5Z" stroke="#8A6D2E" stroke-width="1.3"/><path d="M12 8V16M12 8H13.5M12 10.5H13.5M12 13H13.5" stroke="#8A6D2E" stroke-width="1.3"/></svg>`,
+    default: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="1.5" fill="#5B6156" opacity=".1"/><path d="M6 4.5C6 3.67 6.67 3 7.5 3H14L18 7V19.5C18 20.33 17.33 21 16.5 21H7.5C6.67 21 6 20.33 6 19.5V4.5Z" stroke="#5B6156" stroke-width="1.3"/><path d="M14 3V6.5C14 6.78 14.22 7 14.5 7H18" stroke="#5B6156" stroke-width="1.3"/></svg>`,
+  };
+  ICONS.ppt = ICONS.pptx; ICONS.doc = ICONS.docx;
+  const FOLDER_ICON = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.67 4.67 5 5.5 5H10.2L12.2 7H18.5C19.33 7 20 7.67 20 8.5V17.5C20 18.33 19.33 19 18.5 19H5.5C4.67 19 4 18.33 4 17.5V6.5Z" fill="var(--course-color, var(--moss))" opacity=".14" stroke="var(--course-color, var(--moss))" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+  const BACK_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const DOWNLOAD_ICON = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 4V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17V18.5C5 19.33 5.67 20 6.5 20H17.5C18.33 20 19 19.33 19 18.5V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  const PALETTE = ["#34503F", "#8A5A2E", "#3E5A78", "#8A2E2E", "#5B4A7A", "#3E6B5C"];
+  function courseColor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return PALETTE[h % PALETTE.length];
+  }
+  function extOf(name) {
+    const parts = name.split(".");
+    return parts.length > 1 ? parts.pop().toLowerCase() : "";
+  }
+  // weekName may be null for files that sit directly inside the course folder.
+  function filePath(courseName, weekName, fileName) {
+    const parts = weekName ? [courseName, weekName, fileName] : [courseName, fileName];
+    return ROOT_DIR + parts.map(encodeURIComponent).join("/");
+  }
+
+  // Folders inside a course, plus every file under it (loose files at the
+  // course root + everything inside its folders).
+  function countsFor(course) {
+    const folders = (course.weeks || []).length;
+    const nested = (course.weeks || []).reduce((n, w) => n + (w.files || []).length, 0);
+    return { folders, files: (course.files || []).length + nested };
+  }
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  // One downloadable file row, used by both the course and folder views.
+  function fileRow(courseName, weekName, fileName) {
+    const icon = ICONS[extOf(fileName)] || ICONS.default;
+    const href = filePath(courseName, weekName, fileName);
+    const row = document.createElement("div");
+    row.className = "border rule rounded-sm bg-[var(--card)] px-5 py-4 flex items-center justify-between gap-4 fade-in";
+    row.innerHTML = `
+      <div class="flex items-center gap-3.5 min-w-0">
+        ${icon}
+        <p class="font-medium truncate">${fileName}</p>
+      </div>
+      <a href="${href}" download
+         class="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-sm border transition-colors"
+         style="color: var(--moss-dark); border-color: var(--moss-dark);"
+         onmouseover="this.style.background='var(--moss-dark)';this.style.color='var(--paper)'"
+         onmouseout="this.style.background='';this.style.color='var(--moss-dark)'">
+        ${DOWNLOAD_ICON}<span>Download</span>
+      </a>
+    `;
+    return row;
+  }
+
+  // Looks up ENROLLMENT_CODES (declared at the top of this file, kept out of
+  // the generated dirStructure.js on purpose). Matching is case- and
+  // whitespace-insensitive so "course 1" and "Course 1" both hit.
+  function enrollmentCodeFor(courseName) {
+    const codes = (typeof ENROLLMENT_CODES === "object" && ENROLLMENT_CODES) || {};
+    if (codes[courseName]) return String(codes[courseName]).trim();
+    const wanted = String(courseName).trim().toLowerCase();
+    for (const key of Object.keys(codes)) {
+      if (key.trim().toLowerCase() === wanted) {
+        const val = String(codes[key]).trim();
+        return val || null;
+      }
+    }
+    return null;
+  }
+
+  // navigator.clipboard is unavailable on file:// in some browsers, so fall
+  // back to the old selection trick.
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+    } else {
+      legacyCopy(text);
+    }
+  }
+  function legacyCopy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+    ta.remove();
+  }
+
+  // =====================================================================
+  // PART 1 — APP: reads window.COURSE_STRUCTURE (set by dirStructure.js).
+  // This is the only code path that runs on GitHub Pages.
+  // =====================================================================
+
+  function navigate(next) {
+    state = next;
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function renderBreadcrumbs() {
+    const chevron = `<span class="text-[var(--rule)] mx-0.5">/</span>`;
+    let parts = [`<button class="hover:text-[var(--moss-dark)] transition-colors" data-crumb="home">Home</button>`];
+    if (state.view === "course" || state.view === "week") {
+      parts.push(chevron, `<button class="hover:text-[var(--moss-dark)] transition-colors" data-crumb="course">${state.courseName}</button>`);
+    }
+    if (state.view === "week") {
+      parts.push(chevron, `<span class="text-[var(--ink)]">${state.weekName}</span>`);
+    }
+    crumbsEl.innerHTML = parts.join("");
+    crumbsEl.querySelectorAll("[data-crumb]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const which = btn.dataset.crumb;
+        if (which === "home") navigate({ view: "home" });
+        if (which === "course") navigate({ view: "course", courseName: state.courseName });
+      });
+    });
+  }
+
+  function backButton(label, onClick) {
+    const btn = document.createElement("button");
+    btn.className = "inline-flex items-center gap-1.5 text-sm text-[var(--ink-soft)] hover:text-[var(--moss-dark)] mb-6 transition-colors";
+    btn.innerHTML = `${BACK_ICON}<span>${label}</span>`;
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
+  function renderError(title, message) {
+    app.innerHTML = `
+      <div class="border rule rounded-sm bg-[var(--card)] px-6 py-10 text-center max-w-xl mx-auto">
+        <p class="font-serif-head text-lg font-semibold" style="color: var(--moss-dark)">${title}</p>
+        <p class="text-sm text-[var(--ink-soft)] mt-2">${message}</p>
+      </div>`;
+  }
+
+  function renderHome() {
+    const courses = structure.courses || [];
+    const header = document.createElement("div");
+    header.className = "mb-8";
+    header.innerHTML = `
+      <h1 class="font-serif-head text-3xl font-semibold" style="color: var(--moss-dark)">Courses</h1>
+      <p class="text-sm text-[var(--ink-soft)] mt-1.5">${courses.length} course${courses.length === 1 ? "" : "s"} listed.</p>
+    `;
+    const grid = document.createElement("div");
+    grid.className = "grid sm:grid-cols-2 gap-4";
+
+    if (courses.length === 0) {
+      grid.innerHTML = `<p class="text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center sm:col-span-2">dirStructure.js has no courses yet.</p>`;
+    }
+
+    courses.forEach((course) => {
+      const color = courseColor(course.name);
+      const { folders, files } = countsFor(course);
+      // No sub-folders? Then the file count on its own is the whole story.
+      const meta = folders === 0 ? plural(files, "file") : `${plural(folders, "folder")} · ${plural(files, "file")}`;
+      const code = enrollmentCodeFor(course.name);
+
+      const card = document.createElement("div");
+      card.className = "border rule rounded-sm bg-[var(--card)] tab-accent fade-in overflow-hidden";
+      card.style.setProperty("--course-color", color);
+
+      const open = document.createElement("button");
+      open.className = "w-full text-left p-5 pb-4 hover:bg-black/[0.02] transition-colors";
+      open.innerHTML = `
+        <div class="flex items-center gap-2.5">${FOLDER_ICON}<h2 class="font-serif-head text-lg font-semibold">${course.name}</h2></div>
+        <p class="text-xs text-[var(--ink-soft)] mt-1.5">${meta}</p>
+      `;
+      open.addEventListener("click", () => navigate({ view: "course", courseName: course.name }));
+      card.appendChild(open);
+
+      const codeRow = document.createElement("div");
+      codeRow.className = "border-t rule px-5 py-3 flex items-center justify-between gap-3";
+      if (code) {
+        codeRow.innerHTML = `
+          <div class="min-w-0">
+            <p class="text-xs text-[var(--ink-soft)]">Enrollment code</p>
+            <p class="font-medium truncate" style="font-family: ui-monospace, 'SF Mono', Menlo, monospace;">${code}</p>
+          </div>
+          <button class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-sm border transition-colors"
+                  style="color: var(--moss-dark); border-color: var(--moss-dark);">Copy</button>
+        `;
+        const btn = codeRow.querySelector("button");
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          copyText(code);
+          const prev = btn.textContent;
+          btn.textContent = "Copied";
+          setTimeout(() => (btn.textContent = prev), 1400);
+        });
+      } else {
+        codeRow.innerHTML = `<p class="text-xs text-[var(--ink-soft)] italic">No enrollment code generated for this course yet.</p>`;
+      }
+      card.appendChild(codeRow);
+      grid.appendChild(card);
+    });
+
+    app.innerHTML = "";
+    app.appendChild(header);
+    app.appendChild(grid);
+  }
+
+  function renderCourse() {
+    const course = (structure.courses || []).find((c) => c.name === state.courseName);
+    if (!course) return renderError("Course not found", "This course isn't in dirStructure.js anymore.");
+    const color = courseColor(course.name);
+
+    app.innerHTML = "";
+    app.appendChild(backButton("Back to courses", () => navigate({ view: "home" })));
+    const header = document.createElement("div");
+    header.className = "mb-8";
+    header.innerHTML = `<h1 class="font-serif-head text-3xl font-semibold" style="color: var(--moss-dark)">${course.name}</h1>`;
+    app.appendChild(header);
+
+    const weeks = course.weeks || [];
+    const looseFiles = course.files || [];
+
+    if (weeks.length === 0 && looseFiles.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center";
+      empty.textContent = "Nothing listed for this course yet.";
+      app.appendChild(empty);
+      return;
+    }
+
+    if (weeks.length) {
+      const list = document.createElement("div");
+      list.className = "flex flex-col gap-2.5";
+      weeks.forEach((week) => {
+        const n = (week.files || []).length;
+        const row = document.createElement("button");
+        row.className = "text-left border rule rounded-sm bg-[var(--card)] px-5 py-4 flex items-center justify-between hover:-translate-y-0.5 hover:shadow-[0_2px_0_0_var(--rule)] transition-all tab-accent fade-in";
+        row.style.setProperty("--course-color", color);
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            ${FOLDER_ICON}
+            <div>
+              <p class="font-medium">${week.name}</p>
+              <p class="text-xs text-[var(--ink-soft)]">${plural(n, "file")}</p>
+            </div>
+          </div>
+        `;
+        row.addEventListener("click", () => navigate({ view: "week", courseName: course.name, weekName: week.name }));
+        list.appendChild(row);
+      });
+      app.appendChild(list);
+    }
+
+    // Files dropped straight into the course folder, with no week folder
+    // around them, are listed right here instead of being ignored.
+    if (looseFiles.length) {
+      if (weeks.length) {
+        const divider = document.createElement("p");
+        divider.className = "text-sm text-[var(--ink-soft)] mt-8 mb-3";
+        divider.textContent = "Files in this course folder";
+        app.appendChild(divider);
+      }
+      const fileList = document.createElement("div");
+      fileList.className = "flex flex-col gap-2.5";
+      looseFiles.forEach((fileName) => fileList.appendChild(fileRow(course.name, null, fileName)));
+      app.appendChild(fileList);
+    }
+  }
+
+  function renderWeek() {
+    const course = (structure.courses || []).find((c) => c.name === state.courseName);
+    const week = course && (course.weeks || []).find((w) => w.name === state.weekName);
+    if (!course || !week) return renderError("Week not found", "This week isn't in dirStructure.js anymore.");
+
+    app.innerHTML = "";
+    app.appendChild(backButton(`Back to ${course.name}`, () => navigate({ view: "course", courseName: course.name })));
+    const header = document.createElement("div");
+    header.className = "mb-8";
+    header.innerHTML = `<h1 class="font-serif-head text-3xl font-semibold" style="color: var(--moss-dark)">${week.name}</h1>`;
+    app.appendChild(header);
+
+    const files = week.files || [];
+    if (files.length === 0) {
+      app.innerHTML += `<p class="text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center">No files listed for this week yet.</p>`;
+      return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "flex flex-col gap-2.5";
+    files.forEach((fileName) => list.appendChild(fileRow(course.name, week.name, fileName)));
+    app.appendChild(list);
+  }
+
+  // Reads whatever dirStructure.js put on the window. No fetch(), so this
+  // works identically on file://, localhost and GitHub Pages.
+  function readLoadedStructure() {
+    const data = window.COURSE_STRUCTURE;
+    if (!data) {
+      throw new Error(
+        window.__structureScriptFailed
+          ? `"${STRUCTURE_FILE}" couldn't be loaded`
+          : `"${STRUCTURE_FILE}" loaded but never set window.COURSE_STRUCTURE`
+      );
+    }
+    if (!Array.isArray(data.courses)) throw new Error(`${STRUCTURE_FILE} doesn't look like { courses: [...] }`);
+    return data;
+  }
+
+  // The refresh button re-runs the script tag so edits to dirStructure.js
+  // show up without a hard reload. Over file:// the browser caches it
+  // aggressively, so there we just fall back to a page reload.
+  function reloadStructureScript() {
+    return new Promise((resolve, reject) => {
+      if (window.location.protocol === "file:") {
+        window.location.reload();
+        return; // never settles; the page is going away
+      }
+      const s = document.createElement("script");
+      s.src = `${STRUCTURE_FILE}?t=${Date.now()}`;
+      s.onload = () => { s.remove(); try { resolve(readLoadedStructure()); } catch (e) { reject(e); } };
+      s.onerror = () => { s.remove(); reject(new Error(`Couldn't load "${STRUCTURE_FILE}"`)); };
+      document.body.appendChild(s);
+    });
+  }
+
+  async function render(isManualRefresh) {
+    renderBreadcrumbs();
+    if (isManualRefresh) {
+      refreshIcon.classList.add("spin");
+      setTimeout(() => refreshIcon.classList.remove("spin"), 600);
+    }
+    if (!structure || isManualRefresh) {
+      try {
+        structure = isManualRefresh ? await reloadStructureScript() : readLoadedStructure();
+      } catch (err) {
+        renderError("Couldn't load the course list", `${err.message}. Make sure "${STRUCTURE_FILE}" sits next to this index.html and starts with <code>window.COURSE_STRUCTURE = {</code>.`);
+        return;
+      }
+    }
+    if (state.view === "home") renderHome();
+    else if (state.view === "course") renderCourse();
+    else if (state.view === "week") renderWeek();
+  }
+
+  // =====================================================================
+  // PART 2 — LOCAL GENERATOR: only runs on localhost / 127.0.0.1.
+  // Loops the courses/ folder the same way the deployed app never does,
+  // by reading the directory-index page any local static server creates,
+  // and prints the resulting JS for you to paste into dirStructure.js.
+  // =====================================================================
+
+  const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+
+  async function listDirectory(url) {
+    if (!url.endsWith("/")) url += "/";
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Could not open "${url}" (HTTP ${res.status})`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const base = new URL(url, window.location.href);
+    const dirs = [], files = [];
+    const seen = new Set();
+
+    doc.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href || href.startsWith("?") || href.startsWith("#")) return;
+      if (href === "../" || href === ".." || href === "/") return;
+      let resolved;
+      try { resolved = new URL(href, base); } catch { return; }
+      if (!resolved.pathname.startsWith(base.pathname) || resolved.pathname === base.pathname) return;
+      const rel = resolved.pathname.slice(base.pathname.length).replace(/\/$/, "");
+      if (!rel || rel.includes("/")) return;
+      const name = decodeURIComponent(rel);
+      if (name.startsWith(".")) return;
+      if (seen.has(name)) return;
+      seen.add(name);
+      // Trailing slash is the normal folder signal, but some dev servers
+      // (VS Code's Live Server included) omit it on directory links. Fall
+      // back to "no file extension" as a folder heuristic in that case,
+      // since real course/week folder names don't usually contain a dot.
+      const isDir = href.endsWith("/") || !name.includes(".");
+      (isDir ? dirs : files).push({ name, url: resolved.href });
+    });
+
+    dirs.sort((a, b) => a.name.localeCompare(b.name));
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    console.log(`[Course Repository] listed ${url} ->`, { dirs: dirs.map((d) => d.name), files: files.map((f) => f.name) });
+    return { dirs, files };
+  }
+
+  async function generateStructure() {
+    const { dirs: courseDirs } = await listDirectory(ROOT_DIR);
+    const courses = [];
+    for (const c of courseDirs) {
+      const { dirs: weekDirs, files: courseFiles } = await listDirectory(c.url);
+      const weeks = [];
+      for (const w of weekDirs) {
+        const { files } = await listDirectory(w.url);
+        weeks.push({ name: w.name, files: files.map((f) => f.name) });
+      }
+      // "files" here = files sitting loose in the course folder itself.
+      courses.push({ name: c.name, weeks, files: courseFiles.map((f) => f.name) });
+    }
+    return { courses };
+  }
+
+  // Wraps the scanned structure as a plain script the browser can load from
+  // file:// — no fetch, no CORS, no JSON parsing.
+  function toStructureFile(result) {
+    return (
+      "// Generated by the Course Repository local dev panel.\n" +
+      "// Paste-over this whole file whenever the courses/ folder changes.\n" +
+      "// Enrollment codes do NOT live here — they're in ENROLLMENT_CODES inside index.html.\n" +
+      "window.COURSE_STRUCTURE = " + JSON.stringify(result, null, 2) + ";\n"
+    );
+  }
+
+  async function runGenerator() {
+    const panel = document.getElementById("generatorPanel");
+    const output = document.getElementById("jsonOutput");
+    const status = document.getElementById("genStatus");
+    document.getElementById("rootDirLabel").textContent = ROOT_DIR;
+    panel.classList.remove("hidden");
+    output.value = "";
+    status.textContent = "Scanning " + ROOT_DIR + " ...";
+    try {
+      const result = await generateStructure();
+      output.value = toStructureFile(result);
+      const courseCount = result.courses.length;
+      console.log(`[Course Repository] generated ${STRUCTURE_FILE}:`, result);
+      if (courseCount === 0) {
+        status.textContent = `Found 0 courses under "${ROOT_DIR}". Open DevTools (F12) → Console to see exactly what was fetched and why nothing matched — each folder request is logged there.`;
+      } else {
+        const missing = result.courses.filter((c) => !enrollmentCodeFor(c.name)).map((c) => c.name);
+        status.textContent =
+          `Found ${courseCount} course${courseCount === 1 ? "" : "s"}. Replace the whole contents of ${STRUCTURE_FILE} with this.` +
+          (missing.length ? ` No enrollment code yet for: ${missing.join(", ")} — add them to ENROLLMENT_CODES in index.html.` : "");
+      }
+    } catch (err) {
+      output.value = "";
+      status.textContent = `Couldn't scan the folder: ${err.message}. Make sure you're serving this page from a local static server (see the notes at the bottom of index.html).`;
+      console.error("[Course Repository] generator error:", err);
+    }
+  }
+
+  if (isLocal) {
+    document.getElementById("regenBtn").addEventListener("click", runGenerator);
+    document.getElementById("copyJsonBtn").addEventListener("click", () => {
+      const output = document.getElementById("jsonOutput");
+      output.select();
+      navigator.clipboard?.writeText(output.value).catch(() => document.execCommand("copy"));
+      const status = document.getElementById("genStatus");
+      const prev = status.textContent;
+      status.textContent = "Copied to clipboard.";
+      setTimeout(() => (status.textContent = prev), 1500);
+    });
+    runGenerator();
+  }
+
+  render();
+})();
+</script>
+
+<!--
+  NOTES
+  ================================================================
+  HOW THE COURSE LIST IS LOADED
+  This page does NOT fetch() anything to render the course list. It
+  loads "dirStructure.js" with a <script> tag, and that file sets
+  window.COURSE_STRUCTURE. Script tags are not subject to the CORS
+  rule that blocks fetch() on file:// URLs, so opening index.html by
+  double-clicking it works exactly like GitHub Pages does.
+
+  dirStructure.js must look like:
+    window.COURSE_STRUCTURE = {
+      "courses": [
+        {
+          "name": "Course 1",
+          "weeks": [ { "name": "Week 1", "files": ["a.pdf"] } ],
+          "files": ["syllabus.pdf"]   // loose files at the course root
+        }
+      ]
+    };
+
+  A course's "files" array is optional. Courses with no sub-folders just
+  list their files there, and the landing page then shows a file count
+  only; courses that do have sub-folders show both counts.
+
+  ENROLLMENT CODES
+  Codes live in the ENROLLMENT_CODES object near the top of this file,
+  deliberately separate from the generated dirStructure.js so a
+  regeneration never wipes them. Key each code by the course folder
+  name. Courses with no entry show "No enrollment code generated for
+  this course yet." on the landing page.
+
+  LOCAL GENERATION: to regenerate dirStructure.js, serve this folder
+  with any local static server:
+    - VS Code: install the "Live Server" extension, click "Go Live"
+    - Node:    npx serve .
+    - Python:  python3 -m http.server 8000
+  Then open the served URL at localhost — the amber panel at the top
+  will auto-run and show you the generated JS to paste over
+  dirStructure.js. The panel never appears on the deployed site or on
+  file://.
+-->
+</body>
+</html>
