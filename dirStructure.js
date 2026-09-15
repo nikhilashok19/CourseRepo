@@ -33,7 +33,9 @@ window.COURSE_STRUCTURE = {
           ]
         }
       ],
-      "files": []
+      "files": [
+        "CS-837_Advanced_OS course outline (1).pdf"
+      ]
     },
     {
       "name": "Advance Theory of Computation",
@@ -49,32 +51,6 @@ window.COURSE_STRUCTURE = {
             "Week1_Lecture_Notes.docx",
             "Week1_Slides.pptx"
           ]
-        }
-      ],
-      "files": []
-    },
-    {
-      "name": "Introduction to World Religions",
-      "weeks": [
-        {
-          "name": "Assignments",
-          "files": []
-        },
-        {
-          "name": "Book",
-          "files": []
-        },
-        {
-          "name": "Finals",
-          "files": []
-        },
-        {
-          "name": "Mids",
-          "files": []
-        },
-        {
-          "name": "Presentation",
-          "files": []
         }
       ],
       "files": []
@@ -101,6 +77,18 @@ window.COURSE_STRUCTURE = {
       "files": [
         "CS-813_Mathematical Methods for Computing-A- Fall 2026.docx"
       ]
+    },
+    {
+      "name": "Time Table",
+      "weeks": [],
+      "files": [
+        "MSCS 2K26 Updated Timetable.png"
+      ]
+    },
+    {
+      "name": "Understanding of Quran 1",
+      "weeks": [],
+      "files": []
     }
   ]
 };
