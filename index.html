@@ -18,6 +18,9 @@
   .tab-accent { box-shadow: inset 4px 0 0 0 var(--course-color, var(--moss)); }
   .fade-in { animation: fadeIn .3s ease both; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .slide-in { animation: slideIn .45s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: translateX(0); } }
+  .ann-text { white-space: pre-line; overflow-wrap: anywhere; }
   .skeleton { background: linear-gradient(90deg,#EAE5D8 25%,#F1ECDF 37%,#EAE5D8 63%); background-size:400% 100%; animation: shimmer 1.4s ease infinite; }
   @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
   a:focus-visible, button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
@@ -39,6 +42,11 @@
   <script>
     const ROOT_DIR = "courses/";
     const STRUCTURE_FILE = "dirStructure.js";
+    // A folder with this name, sitting directly inside ROOT_DIR (i.e.
+    // "courses/resources/"), holds resource folders like Timetable or
+    // LMS Join Guide. It's scanned separately and never treated as a
+    // course. Case-insensitive.
+    const RESOURCE_DIR_NAME = "resources";
 
     /* ==========================================================
        ENROLLMENT CODES — edit by hand, keep them here.
@@ -57,6 +65,9 @@
 
   <!-- The generated structure. Loaded as a script so file:// works. -->
   <script src="dirStructure.js" onerror="window.__structureScriptFailed = true"></script>
+
+  <!-- Announcements. Hand-edited; never touched by the generator. -->
+  <script src="announcements.js" onerror="window.__announcementsScriptFailed = true"></script>
 
   <!-- ============ LOCAL-ONLY GENERATOR PANEL ============
        Only ever runs when this page is opened from localhost/127.0.0.1.
@@ -117,6 +128,7 @@
   ICONS.ppt = ICONS.pptx; ICONS.doc = ICONS.docx;
   const FOLDER_ICON = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.67 4.67 5 5.5 5H10.2L12.2 7H18.5C19.33 7 20 7.67 20 8.5V17.5C20 18.33 19.33 19 18.5 19H5.5C4.67 19 4 18.33 4 17.5V6.5Z" fill="var(--course-color, var(--moss))" opacity=".14" stroke="var(--course-color, var(--moss))" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
   const BACK_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const VIEW_ICON = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M2.5 12S5.8 6 12 6s9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8"/></svg>`;
   const DOWNLOAD_ICON = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 4V15M12 15L8 11M12 15L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17V18.5C5 19.33 5.67 20 6.5 20H17.5C18.33 20 19 19.33 19 18.5V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   const PALETTE = ["#34503F", "#8A5A2E", "#3E5A78", "#8A2E2E", "#5B4A7A", "#3E6B5C"];
@@ -129,39 +141,108 @@
     const parts = name.split(".");
     return parts.length > 1 ? parts.pop().toLowerCase() : "";
   }
+  function joinPath(segments) {
+    return segments.filter(Boolean).map(encodeURIComponent).join("/");
+  }
   // weekName may be null for files that sit directly inside the course folder.
   function filePath(courseName, weekName, fileName) {
-    const parts = weekName ? [courseName, weekName, fileName] : [courseName, fileName];
-    return ROOT_DIR + parts.map(encodeURIComponent).join("/");
+    return ROOT_DIR + joinPath(weekName ? [courseName, weekName, fileName] : [courseName, fileName]);
+  }
+  // Resource folders live inside courses/resources/ (so the generator's
+  // directory-listing scan never runs into index.html shadowing the site
+  // root). "segments" starts at the individual resource folder name, e.g.
+  // ["Timetable", "Fall 2026 Timetable.png"] — RESOURCE_DIR_NAME is added
+  // here, once, so callers never need to think about where it lives on disk.
+  function resourcePath(segments) {
+    return ROOT_DIR + RESOURCE_DIR_NAME + "/" + joinPath(segments);
   }
 
-  // Folders inside a course, plus every file under it (loose files at the
-  // course root + everything inside its folders).
-  function countsFor(course) {
-    const folders = (course.weeks || []).length;
-    const nested = (course.weeks || []).reduce((n, w) => n + (w.files || []).length, 0);
-    return { folders, files: (course.files || []).length + nested };
+  // Sub-folders of a node, plus every file beneath it. Courses call their
+  // sub-folders "weeks"; resource folders call them "folders".
+  function childFolders(node) {
+    return node.folders || node.weeks || [];
+  }
+  function countsFor(node) {
+    const folders = childFolders(node);
+    let files = (node.files || []).length;
+    folders.forEach((f) => { files += countsFor(f).files; });
+    return { folders: folders.length, files };
   }
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  function metaLine(node) {
+    const { folders, files } = countsFor(node);
+    return folders === 0 ? plural(files, "file") : `${plural(folders, "folder")} · ${plural(files, "file")}`;
+  }
 
-  // One downloadable file row, used by both the course and folder views.
-  function fileRow(courseName, weekName, fileName) {
+  // ---- Viewing files without downloading them --------------------------
+  // "browser"  → the browser renders it natively in a new tab.
+  // "office"   → Word/PowerPoint/Excel, which browsers can't render, so we
+  //              hand the file's public URL to Google's viewer. That only
+  //              works if the file is reachable from the internet, so on
+  //              localhost / file:// we show a note instead of a button.
+  const BROWSER_VIEWABLE = new Set([
+    "pdf",
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico",
+    "mp4", "webm", "ogv", "mov", "m4v",
+    "mp3", "wav", "m4a", "aac", "flac", "oga", "ogg",
+    "txt", "md", "csv", "html", "htm",
+  ]);
+  const OFFICE_VIEWABLE = new Set(["doc", "docx", "ppt", "pptx", "xls", "xlsx"]);
+
+  const isLocalHost = ["localhost", "127.0.0.1", "[::1]", "::1", ""].includes(window.location.hostname);
+  // Google's viewer must be able to fetch the file itself.
+  const officeViewerAvailable =
+    (window.location.protocol === "http:" || window.location.protocol === "https:") && !isLocalHost;
+
+  function absoluteUrl(href) {
+    try { return new URL(href, window.location.href).href; } catch { return href; }
+  }
+  function viewInfo(fileName, href) {
+    const ext = extOf(fileName);
+    if (BROWSER_VIEWABLE.has(ext)) return { kind: "browser", href };
+    if (OFFICE_VIEWABLE.has(ext)) {
+      if (!officeViewerAvailable) return { kind: "office-unavailable" };
+      return { kind: "office", href: "https://docs.google.com/viewer?embedded=false&url=" + encodeURIComponent(absoluteUrl(href)) };
+    }
+    return { kind: "none" };
+  }
+
+  // One file row with Download and, where possible, View.
+  function fileRow(fileName, href) {
     const icon = ICONS[extOf(fileName)] || ICONS.default;
-    const href = filePath(courseName, weekName, fileName);
+    const view = viewInfo(fileName, href);
     const row = document.createElement("div");
     row.className = "border rule rounded-sm bg-[var(--card)] px-5 py-4 flex items-center justify-between gap-4 fade-in";
+
+    let viewEl = "";
+    if (view.kind === "browser" || view.kind === "office") {
+      viewEl = `
+        <a href="${view.href}" target="_blank" rel="noopener"
+           class="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-sm border transition-colors"
+           style="color: var(--ink-soft); border-color: var(--rule);"
+           onmouseover="this.style.background='var(--paper)';this.style.color='var(--moss-dark)'"
+           onmouseout="this.style.background='';this.style.color='var(--ink-soft)'">
+          ${VIEW_ICON}<span>View</span>
+        </a>`;
+    } else if (view.kind === "office-unavailable") {
+      viewEl = `<span class="shrink-0 text-xs text-[var(--ink-soft)] italic max-w-[11rem] text-right">Preview needs the published site — download to open it here.</span>`;
+    }
+
     row.innerHTML = `
       <div class="flex items-center gap-3.5 min-w-0">
         ${icon}
         <p class="font-medium truncate">${fileName}</p>
       </div>
-      <a href="${href}" download
-         class="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-sm border transition-colors"
-         style="color: var(--moss-dark); border-color: var(--moss-dark);"
-         onmouseover="this.style.background='var(--moss-dark)';this.style.color='var(--paper)'"
-         onmouseout="this.style.background='';this.style.color='var(--moss-dark)'">
-        ${DOWNLOAD_ICON}<span>Download</span>
-      </a>
+      <div class="shrink-0 flex items-center gap-2">
+        ${viewEl}
+        <a href="${href}" download
+           class="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-sm border transition-colors"
+           style="color: var(--moss-dark); border-color: var(--moss-dark);"
+           onmouseover="this.style.background='var(--moss-dark)';this.style.color='var(--paper)'"
+           onmouseout="this.style.background='';this.style.color='var(--moss-dark)'">
+          ${DOWNLOAD_ICON}<span>Download</span>
+        </a>
+      </div>
     `;
     return row;
   }
@@ -222,12 +303,21 @@
     if (state.view === "week") {
       parts.push(chevron, `<span class="text-[var(--ink)]">${state.weekName}</span>`);
     }
+    if (state.view === "resource") {
+      (state.path || []).forEach((seg, i, arr) => {
+        parts.push(chevron);
+        parts.push(i === arr.length - 1
+          ? `<span class="text-[var(--ink)]">${seg}</span>`
+          : `<button class="hover:text-[var(--moss-dark)] transition-colors" data-crumb="resource" data-depth="${i + 1}">${seg}</button>`);
+      });
+    }
     crumbsEl.innerHTML = parts.join("");
     crumbsEl.querySelectorAll("[data-crumb]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const which = btn.dataset.crumb;
         if (which === "home") navigate({ view: "home" });
         if (which === "course") navigate({ view: "course", courseName: state.courseName });
+        if (which === "resource") navigate({ view: "resource", path: (state.path || []).slice(0, Number(btn.dataset.depth)) });
       });
     });
   }
@@ -248,14 +338,264 @@
       </div>`;
   }
 
-  function renderHome() {
-    const courses = structure.courses || [];
+  // =====================================================================
+  // ANNOUNCEMENTS — homepage-only carousel, fed by announcements.js.
+  // Each item carries its own interval (ms); the carousel waits that long
+  // before sliding to the next one. Manual arrows/dots restart the timer.
+  // =====================================================================
+  let announcementTimer = null;
+  let announcementIndex = 0;
+
+  function announcementItems() {
+    const src = window.ANNOUNCEMENTS;
+    if (!src) return [];
+    const items = Array.isArray(src) ? src : (src.items || []);
+    return items.filter((a) => a && (a.text || a.title));
+  }
+  function announcementInterval(item) {
+    const fallback = (!Array.isArray(window.ANNOUNCEMENTS) && window.ANNOUNCEMENTS && window.ANNOUNCEMENTS.defaultInterval) || 10000;
+    const n = Number(item.interval);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  }
+  function stopAnnouncements() {
+    if (announcementTimer) { clearTimeout(announcementTimer); announcementTimer = null; }
+  }
+
+  function renderAnnouncements() {
+    const items = announcementItems();
+    const section = document.createElement("section");
+    section.className = "mb-10";
+
+    if (items.length === 0) {
+      section.innerHTML = `
+        <h2 class="font-serif-head text-xl font-semibold mb-3" style="color: var(--moss-dark)">Announcements</h2>
+        <div class="border rule rounded-sm bg-[var(--card)] px-5 py-6 text-center">
+          <p class="text-sm text-[var(--ink-soft)]">No announcements right now. Check back later.</p>
+        </div>`;
+      return section;
+    }
+
+    section.innerHTML = `
+      <div class="flex items-center justify-between gap-4 mb-3">
+        <h2 class="font-serif-head text-xl font-semibold" style="color: var(--moss-dark)">Announcements</h2>
+        <div class="flex items-center gap-2">
+          <button data-ann="prev" aria-label="Previous announcement" class="text-[var(--ink-soft)] hover:text-[var(--moss-dark)] transition-colors p-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button data-ann="next" aria-label="Next announcement" class="text-[var(--ink-soft)] hover:text-[var(--moss-dark)] transition-colors p-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="border rule rounded-sm bg-[var(--card)] tab-accent overflow-hidden" style="--course-color: var(--amber)">
+        <div data-ann="slide" class="px-5 py-5">
+          <p data-ann="counter" class="text-xs text-[var(--ink-soft)]"></p>
+          <h3 data-ann="title" class="font-serif-head text-lg font-semibold mt-1" style="color: var(--moss-dark)"></h3>
+          <p data-ann="body" class="ann-text text-sm text-[var(--ink)] mt-2 leading-relaxed max-h-72 overflow-y-auto"></p>
+          <p data-ann="date" class="text-xs text-[var(--ink-soft)] mt-3"></p>
+        </div>
+      </div>
+      <div data-ann="dots" class="flex items-center justify-center gap-1.5 mt-3"></div>
+    `;
+
+    const slide = section.querySelector('[data-ann="slide"]');
+    const titleEl = section.querySelector('[data-ann="title"]');
+    const bodyEl = section.querySelector('[data-ann="body"]');
+    const dateEl = section.querySelector('[data-ann="date"]');
+    const counterEl = section.querySelector('[data-ann="counter"]');
+    const dotsEl = section.querySelector('[data-ann="dots"]');
+
+    if (announcementIndex >= items.length) announcementIndex = 0;
+
+    function show(i, restartTimer) {
+      announcementIndex = (i + items.length) % items.length;
+      const item = items[announcementIndex];
+
+      titleEl.textContent = item.title || "";
+      titleEl.classList.toggle("hidden", !item.title);
+      bodyEl.textContent = item.text || "";
+      dateEl.textContent = item.date || "";
+      dateEl.classList.toggle("hidden", !item.date);
+      counterEl.textContent = items.length > 1 ? `${announcementIndex + 1} of ${items.length}` : "";
+      bodyEl.scrollTop = 0;
+
+      // retrigger the left-to-right slide animation
+      slide.classList.remove("slide-in");
+      void slide.offsetWidth;
+      slide.classList.add("slide-in");
+
+      dotsEl.querySelectorAll("button").forEach((d, idx) => {
+        d.style.background = idx === announcementIndex ? "var(--moss-dark)" : "var(--rule)";
+        d.style.width = idx === announcementIndex ? "18px" : "7px";
+      });
+
+      stopAnnouncements();
+      if (restartTimer !== false && items.length > 1) {
+        announcementTimer = setTimeout(() => show(announcementIndex + 1), announcementInterval(item));
+      }
+    }
+
+    if (items.length > 1) {
+      items.forEach((_, idx) => {
+        const dot = document.createElement("button");
+        dot.setAttribute("aria-label", `Announcement ${idx + 1}`);
+        dot.className = "h-[7px] rounded-full transition-all";
+        dot.style.width = "7px";
+        dot.style.background = "var(--rule)";
+        dot.addEventListener("click", () => show(idx));
+        dotsEl.appendChild(dot);
+      });
+      section.querySelector('[data-ann="prev"]').addEventListener("click", () => show(announcementIndex - 1));
+      section.querySelector('[data-ann="next"]').addEventListener("click", () => show(announcementIndex + 1));
+    } else {
+      section.querySelector('[data-ann="prev"]').classList.add("hidden");
+      section.querySelector('[data-ann="next"]').classList.add("hidden");
+    }
+
+    show(announcementIndex);
+    return section;
+  }
+
+  // =====================================================================
+  // RESOURCE FOLDERS — any folder sitting next to courses/ in the repo
+  // root. They never have enrollment codes and are listed above courses.
+  // =====================================================================
+  function resourceRoots() {
+    return (structure && structure.resources) || [];
+  }
+  // Walks ["Timetable", "Fall 2026"] down the resource tree. Returns null
+  // if any segment is missing (e.g. the folder was removed and the
+  // structure regenerated while the user sat on that page).
+  function findResourceNode(path) {
+    let node = resourceRoots().find((r) => r.name === path[0]);
+    for (let i = 1; node && i < path.length; i++) {
+      node = (node.folders || []).find((f) => f.name === path[i]);
+    }
+    return node || null;
+  }
+
+  function folderRow(node, onClick, color) {
+    const row = document.createElement("button");
+    row.className = "w-full text-left border rule rounded-sm bg-[var(--card)] px-5 py-4 flex items-center justify-between hover:-translate-y-0.5 hover:shadow-[0_2px_0_0_var(--rule)] transition-all tab-accent fade-in";
+    row.style.setProperty("--course-color", color);
+    row.innerHTML = `
+      <div class="flex items-center gap-3">
+        ${FOLDER_ICON}
+        <div>
+          <p class="font-medium">${node.name}</p>
+          <p class="text-xs text-[var(--ink-soft)]">${metaLine(node)}</p>
+        </div>
+      </div>
+    `;
+    row.addEventListener("click", onClick);
+    return row;
+  }
+
+  // Shared body for "a folder that may hold sub-folders, files, or both".
+  function renderFolderBody(node, pathSegments, hrefFor, color, emptyMessage) {
+    const folders = childFolders(node);
+    const files = node.files || [];
+
+    if (folders.length === 0 && files.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center";
+      empty.textContent = emptyMessage;
+      app.appendChild(empty);
+      return;
+    }
+
+    if (folders.length) {
+      const list = document.createElement("div");
+      list.className = "flex flex-col gap-2.5";
+      folders.forEach((child) => {
+        list.appendChild(folderRow(child, () => navigate({ view: "resource", path: pathSegments.concat(child.name) }), color));
+      });
+      app.appendChild(list);
+    }
+
+    if (files.length) {
+      if (folders.length) {
+        const divider = document.createElement("p");
+        divider.className = "text-sm text-[var(--ink-soft)] mt-8 mb-3";
+        divider.textContent = "Files in this folder";
+        app.appendChild(divider);
+      }
+      const fileList = document.createElement("div");
+      fileList.className = "flex flex-col gap-2.5";
+      files.forEach((fileName) => fileList.appendChild(fileRow(fileName, hrefFor(fileName))));
+      app.appendChild(fileList);
+    }
+  }
+
+  function renderResource() {
+    const path = state.path || [];
+    const node = findResourceNode(path);
+    if (!node) return renderError("Folder not found", "This folder isn't in dirStructure.js anymore.");
+    const color = courseColor(path[0]);
+
+    app.innerHTML = "";
+    const parent = path.slice(0, -1);
+    app.appendChild(backButton(
+      parent.length ? `Back to ${parent[parent.length - 1]}` : "Back to home",
+      () => navigate(parent.length ? { view: "resource", path: parent } : { view: "home" })
+    ));
     const header = document.createElement("div");
     header.className = "mb-8";
+    header.innerHTML = `<h1 class="font-serif-head text-3xl font-semibold" style="color: var(--moss-dark)">${node.name}</h1>`;
+    app.appendChild(header);
+
+    renderFolderBody(node, path, (fileName) => resourcePath(path.concat(fileName)), color, "Nothing in this folder yet.");
+  }
+
+  function renderHome() {
+    const courses = structure.courses || [];
+    const resources = resourceRoots();
+
+    app.innerHTML = "";
+    app.appendChild(renderAnnouncements());
+
+    if (resources.length) {
+      const resHeader = document.createElement("div");
+      resHeader.className = "mb-4";
+      resHeader.innerHTML = `
+        <h2 class="font-serif-head text-2xl font-semibold" style="color: var(--moss-dark)">Resources</h2>
+        <p class="text-sm text-[var(--ink-soft)] mt-1">Timetables, guides and anything else outside the courses.</p>
+      `;
+      app.appendChild(resHeader);
+
+      const resGrid = document.createElement("div");
+      resGrid.className = "grid sm:grid-cols-2 gap-4";
+      resources.forEach((res) => {
+        resGrid.appendChild(folderRow(res, () => navigate({ view: "resource", path: [res.name] }), courseColor(res.name)));
+      });
+      app.appendChild(resGrid);
+
+      // Files sitting loose directly in courses/resources/ — no folder,
+      // just a file — are downloadable straight from the homepage.
+      const resourceFiles = (structure && structure.resourceFiles) || [];
+      if (resourceFiles.length) {
+        const divider = document.createElement("p");
+        divider.className = "text-sm text-[var(--ink-soft)] mt-6 mb-3";
+        divider.textContent = "Other files";
+        app.appendChild(divider);
+        const fileList = document.createElement("div");
+        fileList.className = "flex flex-col gap-2.5";
+        resourceFiles.forEach((fileName) => fileList.appendChild(fileRow(fileName, resourcePath([fileName]))));
+        app.appendChild(fileList);
+      }
+      const spacer = document.createElement("div");
+      spacer.className = "mb-10";
+      app.appendChild(spacer);
+    }
+
+    const header = document.createElement("div");
+    header.className = "mb-4";
     header.innerHTML = `
-      <h1 class="font-serif-head text-3xl font-semibold" style="color: var(--moss-dark)">Courses</h1>
-      <p class="text-sm text-[var(--ink-soft)] mt-1.5">${courses.length} course${courses.length === 1 ? "" : "s"} listed.</p>
+      <h2 class="font-serif-head text-2xl font-semibold" style="color: var(--moss-dark)">Courses</h2>
+      <p class="text-sm text-[var(--ink-soft)] mt-1">${plural(courses.length, "course")} listed.</p>
     `;
+    app.appendChild(header);
+
     const grid = document.createElement("div");
     grid.className = "grid sm:grid-cols-2 gap-4";
 
@@ -265,9 +605,7 @@
 
     courses.forEach((course) => {
       const color = courseColor(course.name);
-      const { folders, files } = countsFor(course);
-      // No sub-folders? Then the file count on its own is the whole story.
-      const meta = folders === 0 ? plural(files, "file") : `${plural(folders, "folder")} · ${plural(files, "file")}`;
+      const meta = metaLine(course);
       const code = enrollmentCodeFor(course.name);
 
       const card = document.createElement("div");
@@ -277,7 +615,7 @@
       const open = document.createElement("button");
       open.className = "w-full text-left p-5 pb-4 hover:bg-black/[0.02] transition-colors";
       open.innerHTML = `
-        <div class="flex items-center gap-2.5">${FOLDER_ICON}<h2 class="font-serif-head text-lg font-semibold">${course.name}</h2></div>
+        <div class="flex items-center gap-2.5">${FOLDER_ICON}<h3 class="font-serif-head text-lg font-semibold">${course.name}</h3></div>
         <p class="text-xs text-[var(--ink-soft)] mt-1.5">${meta}</p>
       `;
       open.addEventListener("click", () => navigate({ view: "course", courseName: course.name }));
@@ -309,8 +647,6 @@
       grid.appendChild(card);
     });
 
-    app.innerHTML = "";
-    app.appendChild(header);
     app.appendChild(grid);
   }
 
@@ -341,21 +677,7 @@
       const list = document.createElement("div");
       list.className = "flex flex-col gap-2.5";
       weeks.forEach((week) => {
-        const n = (week.files || []).length;
-        const row = document.createElement("button");
-        row.className = "text-left border rule rounded-sm bg-[var(--card)] px-5 py-4 flex items-center justify-between hover:-translate-y-0.5 hover:shadow-[0_2px_0_0_var(--rule)] transition-all tab-accent fade-in";
-        row.style.setProperty("--course-color", color);
-        row.innerHTML = `
-          <div class="flex items-center gap-3">
-            ${FOLDER_ICON}
-            <div>
-              <p class="font-medium">${week.name}</p>
-              <p class="text-xs text-[var(--ink-soft)]">${plural(n, "file")}</p>
-            </div>
-          </div>
-        `;
-        row.addEventListener("click", () => navigate({ view: "week", courseName: course.name, weekName: week.name }));
-        list.appendChild(row);
+        list.appendChild(folderRow(week, () => navigate({ view: "week", courseName: course.name, weekName: week.name }), color));
       });
       app.appendChild(list);
     }
@@ -371,7 +693,7 @@
       }
       const fileList = document.createElement("div");
       fileList.className = "flex flex-col gap-2.5";
-      looseFiles.forEach((fileName) => fileList.appendChild(fileRow(course.name, null, fileName)));
+      looseFiles.forEach((fileName) => fileList.appendChild(fileRow(fileName, filePath(course.name, null, fileName))));
       app.appendChild(fileList);
     }
   }
@@ -390,13 +712,19 @@
 
     const files = week.files || [];
     if (files.length === 0) {
-      app.innerHTML += `<p class="text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center">No files listed for this week yet.</p>`;
+      // NOTE: appendChild, not `app.innerHTML +=`. Re-parsing innerHTML
+      // rebuilds the Back button and throws away its click listener, which
+      // is why Back used to do nothing inside an empty folder.
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-[var(--ink-soft)] border rule rounded-sm bg-[var(--card)] px-5 py-8 text-center";
+      empty.textContent = "No files listed for this folder yet.";
+      app.appendChild(empty);
       return;
     }
 
     const list = document.createElement("div");
     list.className = "flex flex-col gap-2.5";
-    files.forEach((fileName) => list.appendChild(fileRow(course.name, week.name, fileName)));
+    files.forEach((fileName) => list.appendChild(fileRow(fileName, filePath(course.name, week.name, fileName))));
     app.appendChild(list);
   }
 
@@ -446,9 +774,11 @@
         return;
       }
     }
+    stopAnnouncements(); // the carousel only ever lives on the homepage
     if (state.view === "home") renderHome();
     else if (state.view === "course") renderCourse();
     else if (state.view === "week") renderWeek();
+    else if (state.view === "resource") renderResource();
   }
 
   // =====================================================================
@@ -458,7 +788,7 @@
   // and prints the resulting JS for you to paste into dirStructure.js.
   // =====================================================================
 
-  const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  const isLocal = isLocalHost && window.location.protocol !== "file:";
 
   async function listDirectory(url) {
     if (!url.endsWith("/")) url += "/";
@@ -497,10 +827,37 @@
     return { dirs, files };
   }
 
+  const MAX_RESOURCE_DEPTH = 5; // plenty, and stops any accidental loop
+
+  // Resource folders can nest as deep as you like, so this walks itself.
+  async function scanResourceFolder(dir, depth) {
+    const { dirs, files } = await listDirectory(dir.url);
+    const folders = [];
+    if (depth < MAX_RESOURCE_DEPTH) {
+      for (const sub of dirs) folders.push(await scanResourceFolder(sub, depth + 1));
+    }
+    return { name: dir.name, folders, files: files.map((f) => f.name) };
+  }
+
   async function generateStructure() {
     const { dirs: courseDirs } = await listDirectory(ROOT_DIR);
     const courses = [];
+    let resources = [];
+    let resourceFiles = [];
+
     for (const c of courseDirs) {
+      // courses/resources/ (case-insensitive) is pulled out here rather
+      // than being added as a course. Scanning it lives inside ROOT_DIR
+      // on purpose: fetching the *site root* for a listing would just
+      // return index.html instead of a folder index (every static server
+      // serves index.html for a directory that has one), so that never
+      // worked. Nothing inside courses/ has that problem.
+      if (c.name.trim().toLowerCase() === RESOURCE_DIR_NAME.toLowerCase()) {
+        const scanned = await scanResourceFolder(c, 1);
+        resources = scanned.folders;       // e.g. Timetable, LMS Join Guide
+        resourceFiles = scanned.files;      // any file dropped directly in resources/
+        continue;
+      }
       const { dirs: weekDirs, files: courseFiles } = await listDirectory(c.url);
       const weeks = [];
       for (const w of weekDirs) {
@@ -510,7 +867,8 @@
       // "files" here = files sitting loose in the course folder itself.
       courses.push({ name: c.name, weeks, files: courseFiles.map((f) => f.name) });
     }
-    return { courses };
+
+    return { resources, resourceFiles, courses };
   }
 
   // Wraps the scanned structure as a plain script the browser can load from
@@ -541,8 +899,9 @@
         status.textContent = `Found 0 courses under "${ROOT_DIR}". Open DevTools (F12) → Console to see exactly what was fetched and why nothing matched — each folder request is logged there.`;
       } else {
         const missing = result.courses.filter((c) => !enrollmentCodeFor(c.name)).map((c) => c.name);
+        const res = result.resources.length;
         status.textContent =
-          `Found ${courseCount} course${courseCount === 1 ? "" : "s"}. Replace the whole contents of ${STRUCTURE_FILE} with this.` +
+          `Found ${courseCount} course${courseCount === 1 ? "" : "s"} and ${res} resource folder${res === 1 ? "" : "s"}. Replace the whole contents of ${STRUCTURE_FILE} with this.` +
           (missing.length ? ` No enrollment code yet for: ${missing.join(", ")} — add them to ENROLLMENT_CODES in index.html.` : "");
       }
     } catch (err) {
@@ -582,6 +941,9 @@
 
   dirStructure.js must look like:
     window.COURSE_STRUCTURE = {
+      "resources": [
+        { "name": "Timetable", "folders": [], "files": ["timetable.png"] }
+      ],
       "courses": [
         {
           "name": "Course 1",
@@ -595,12 +957,37 @@
   list their files there, and the landing page then shows a file count
   only; courses that do have sub-folders show both counts.
 
-  ENROLLMENT CODES
-  Codes live in the ENROLLMENT_CODES object near the top of this file,
-  deliberately separate from the generated dirStructure.js so a
-  regeneration never wipes them. Key each code by the course folder
-  name. Courses with no entry show "No enrollment code generated for
-  this course yet." on the landing page.
+  RESOURCE FOLDERS
+  Put a folder named "resources" INSIDE courses/ (i.e. courses/resources/),
+  and put your actual resource folders inside that — e.g.
+  courses/resources/Timetable, courses/resources/LMS Join Guide. Each one
+  shows up above the courses on the homepage with no enrollment code. They
+  can nest as deep as you like: sub-folders render as folders, loose files
+  render as file rows, and a mix of both renders both. A file dropped
+  directly in courses/resources/ itself (no folder around it) shows up
+  under "Other files" on the homepage.
+
+  Why courses/resources/ and not a "Resources" folder next to courses/ at
+  the site root: the generator finds folders by fetching a directory and
+  reading the index page a static server builds for it — but a directory
+  that contains an index.html (the site root always does) gets that page
+  served instead of a listing, so the root can never be scanned this way.
+  Nothing inside courses/ has an index.html, so scanning works there.
+
+  VIEW BUTTONS
+  PDFs, images, video, audio and plain-text files get a View button that
+  opens them in a new browser tab. Word/PowerPoint/Excel files can't be
+  rendered by a browser, so their View button points at Google's document
+  viewer — which needs to fetch the file over the public internet. On
+  localhost and on file:// that's impossible, so those rows show a short
+  note next to Download instead. On GitHub Pages the button appears.
+
+  ANNOUNCEMENTS
+  Live in announcements.js as window.ANNOUNCEMENTS.items. Each item has
+  its own "interval" in milliseconds (10000 = 10s) and falls back to
+  defaultInterval. They render as a homepage-only carousel, one at a time,
+  sliding in from the left; arrows and dots let viewers move early. An
+  empty items array shows "No announcements right now."
 
   LOCAL GENERATION: to regenerate dirStructure.js, serve this folder
   with any local static server:

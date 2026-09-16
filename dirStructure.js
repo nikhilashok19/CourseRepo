@@ -2,6 +2,10 @@
 // Paste-over this whole file whenever the courses/ folder changes.
 // Enrollment codes do NOT live here — they're in ENROLLMENT_CODES inside index.html.
 window.COURSE_STRUCTURE = {
+  "resources": [],
+  "resourceFiles": [
+    "MSCS 2K26 Updated Timetable.png"
+  ],
   "courses": [
     {
       "name": "Advance Algorithm Analysis",
@@ -82,13 +86,6 @@ window.COURSE_STRUCTURE = {
       ],
       "files": [
         "CS-813_Mathematical Methods for Computing-A- Fall 2026.docx"
-      ]
-    },
-    {
-      "name": "Time Table",
-      "weeks": [],
-      "files": [
-        "MSCS 2K26 Updated Timetable.png"
       ]
     },
     {
