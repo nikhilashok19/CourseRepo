@@ -24,5 +24,11 @@ window.ANNOUNCEMENTS = {
       date: "16 Sep 2026",
       interval: 10000,
     },
+    {
+      title: "Advanced Theory of Computation - Question",
+      text: "If we have a finite language and we consider that we have infinite compute power and we train our language model on this finite data. Will this model have all the possible answers to the questions that will be asked to it already calculated?",
+      date: "11 Sep 2026",
+      interval: 10000,
+    },
   ],
 };
