@@ -72,6 +72,12 @@ window.COURSE_STRUCTURE = {
             "Practice Problems 1.pdf",
             "Vector algebra.pdf"
           ]
+        },
+        {
+          "name": "Week 2",
+          "files": [
+            "Lecture week 2.pdf"
+          ]
         }
       ],
       "files": [
