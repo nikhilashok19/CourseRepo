@@ -39,7 +39,7 @@ window.COURSE_STRUCTURE = {
         {
           "name": "Week 1",
           "files": [
-            "DOC-20260909-WA0038.pdf"
+            "operating-system-overview.pdf"
           ]
         }
       ],
